@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
+from django.core.validators import RegexValidator
 
 
 
@@ -14,13 +15,20 @@ class UserAccountManager(BaseUserManager):
             email = self.normalize_email(email)
             extra_fields["email"] = email
 
-        if phone:
+        if phone:    
             extra_fields["phone"] = phone
+        
 
         user = self.model(**extra_fields)
-        user.set_password(password)
+
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+    
         user.save(using=self._db) 
-        return user       
+        return user 
+
           
 
 
@@ -35,26 +43,27 @@ class UserAccountManager(BaseUserManager):
 
         if extra_fields.get("is_staff") is not True:
             raise ValueError("SuperUser must have is_staff=True")
-        if extra_fields.get("is_staff") is not True:
-            raise ValueError("SuperUse must have is_superuser=True")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("SuperUser must have is_superuser=True")
 
         return self.create_user(email=email, phone=phone, password=password, **extra_fields)
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     phone = PhoneNumberField(unique=True, region='IR')
-    email = models.EmailField(unique=True, null=True, blank=True)
+    email = models.EmailField(unique=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=70)
     date_joined = models.DateTimeField(auto_now_add=True)
-    national_id = models.PositiveIntegerField(max_length=10, unique=True)
+    national_id = models.CharField(max_length=10, unique=True,  validators=[RegexValidator(regex=r'^\d{10}$', message="National ID must be 10 digits")])
+
     GENDER_TYPES = (
         ("F", "FEMALE"),
         ("M", "MALE")
     )
-    gender = models.CharField(max_length=10, choices=GENDER_TYPES, null=True, blank=True)
+    gender = models.CharField(max_length=20, choices=GENDER_TYPES, null=True, blank=True)
 
     USER_TYPES = (
         ("normal", "Normal"),
@@ -66,5 +75,21 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
 
     USERNAME_FIELD = "phone"
-    REQUIRED_FIELDS = ["email"]
+    REQUIRED_FIELDS = ["first_name", "last_name", "email"]
     objects = UserAccountManager()
+
+    class Meta:
+        verbose_name = "User"
+        verbose_name_plural = "Users"
+
+
+    def get_full_name(self):
+        return f"{self.first_name} {self.last_name}"
+    
+
+    def get_short_name(self):
+        return f"{self.first_name}"
+
+
+    def __str__(self):
+        return f"{self.first_name}- {self.last_name}"
